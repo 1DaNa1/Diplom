@@ -343,4 +343,43 @@ class ApiService {
     return TeacherDashboard.fromJson(_decodeMap(response));
   }
 
+
+  Future<StreakStats> getStreakStats({
+    required int userId,
+  }) async {
+    final uri = Uri.parse('$baseUrl/api/progress/$userId/streak');
+
+    final response = await http.get(
+      uri,
+      headers: {'Content-Type': 'application/json; charset=utf-8'},
+    );
+
+    if (response.statusCode != 200) {
+      throw Exception('Помилка завантаження серії активності: ${response.body}');
+    }
+
+    return StreakStats.fromJson(_decodeMap(response));
+  }
+
+  Future<List<LeaderboardEntry>> getLeaderboard({
+    int limit = 10,
+  }) async {
+    final uri = Uri.parse('$baseUrl/api/progress/leaderboard?limit=$limit');
+
+    final response = await http.get(
+      uri,
+      headers: {'Content-Type': 'application/json; charset=utf-8'},
+    );
+
+    if (response.statusCode != 200) {
+      throw Exception('Помилка завантаження таблиці лідерів: ${response.body}');
+    }
+
+    return _decodeList(response)
+        .map((item) => LeaderboardEntry.fromJson(item as Map<String, dynamic>))
+        .toList();
+  }
+
+
+
 }

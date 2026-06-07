@@ -16,7 +16,7 @@ app = FastAPI(
         "Інтерактивна система ігрового навчання з алгоритмічним "
         "генеруванням контенту для заохочення дітей до читання."
     ),
-    version="1.1.0",
+    version="1.2.1",
 )
 
 
@@ -39,7 +39,7 @@ def root():
     return {
         "message": "ReadQuest AI backend is running",
         "docs": "/docs",
-        "version": "1.1.0",
+        "version": "1.2.1",
         "features": [
             "quest_generation",
             "openai_generation",
@@ -49,6 +49,9 @@ def root():
             "teacher_mode",
             "progress_tracking",
             "result_export",
+            "leaderboard",
+            "reading_streaks",
+            "celebration_effects",
         ],
     }
 

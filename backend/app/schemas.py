@@ -285,3 +285,46 @@ class TeacherDashboardOut(BaseModel):
     metrics: list[TeacherMetricOut]
     chart: list[TeacherChartPointOut]
     insights: list[TeacherInsightOut]
+
+
+class StreakOut(BaseModel):
+    user_id: int
+    current_streak: int
+    longest_streak: int
+    active_today: bool
+    last_activity: datetime | None = None
+    message: str
+
+
+class LeaderboardEntryOut(BaseModel):
+    rank: int
+    user_id: int
+    username: str
+    grade_level: int
+    total_xp: int
+    coins: int
+    level: int
+    completed_quests: int
+    average_percentage: float
+    best_percentage: float
+    current_streak: int
+
+
+class LocalGenerationStepOut(BaseModel):
+    title: str
+    description: str
+    example: str | None = None
+
+
+class LocalGenerationPreviewOut(BaseModel):
+    title: str
+    sentence_count: int
+    used_fallback_sentences: bool
+    keywords: list[str]
+    keyword_frequencies: dict[str, int]
+    named_entities: list[str]
+    selected_entity: str | None
+    question_strategies: list[str]
+    distractor_strategy: str
+    steps: list[LocalGenerationStepOut]
+

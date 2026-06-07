@@ -616,6 +616,200 @@ class ContentGenerationService:
 
         return None
 
+
+    def explain_local_generation(self, request: QuestGenerateRequest) -> dict:
+        """
+        Повертає прозоре пояснення локального алгоритму генерації.
+
+        Цей метод не створює квест і не змінює базу даних. Він потрібний для
+        демонстрації того, як система працює без зовнішнього AI сервісу:
+        очищення тексту, поділ на речення, пошук ключових слів, просте
+        визначення іменованих сутностей, вибір ймовірного персонажа та
+        формування стратегії питань.
+        """
+
+        clean_text = self._clean_text(request.text)
+        sentences = self._split_sentences(clean_text)
+        used_fallback_sentences = False
+
+        if len(sentences) < 4:
+            sentences = self._build_safe_sentences(clean_text)
+            used_fallback_sentences = True
+
+        keyword_frequencies = self._extract_keyword_frequencies(clean_text)
+        keywords = list(keyword_frequencies.keys())[:10]
+        named_entities = self._extract_named_entities(clean_text)
+        selected_entity = self._extract_probable_hero(clean_text)
+
+        question_strategies = [
+            "головна думка тексту",
+            "пошук важливої деталі",
+            "послідовність подій",
+            "причинно-наслідковий зв’язок",
+            "роль персонажа або центрального об’єкта",
+            "уважність до змісту",
+        ]
+
+        steps = [
+            {
+                "title": "Очищення тексту",
+                "description": (
+                    "Система прибирає зайві пропуски та приводить текст до зручного "
+                    "для обробки вигляду."
+                ),
+                "example": clean_text[:180],
+            },
+            {
+                "title": "Поділ на речення",
+                "description": (
+                    "Текст розбивається на змістові речення. Саме речення стають "
+                    "основою для правильних відповідей і прикладів у питаннях."
+                ),
+                "example": sentences[0] if sentences else None,
+            },
+            {
+                "title": "Виділення ключових слів",
+                "description": (
+                    "Алгоритм відбирає змістові слова за частотою появи, ігноруючи "
+                    "короткі та службові слова. Такі слова допомагають сформувати "
+                    "питання на уважність і розуміння теми."
+                ),
+                "example": ", ".join(keywords[:6]) if keywords else None,
+            },
+            {
+                "title": "Пошук іменованих сутностей",
+                "description": (
+                    "Система шукає слова з великої літери, які можуть бути іменами "
+                    "персонажів, назвами місць або важливими об’єктами тексту."
+                ),
+                "example": ", ".join(named_entities[:6]) if named_entities else None,
+            },
+            {
+                "title": "Вибір ймовірного персонажа",
+                "description": (
+                    "Перший змістовний кандидат серед іменованих сутностей "
+                    "використовується як можливий центральний персонаж для питань."
+                ),
+                "example": selected_entity,
+            },
+            {
+                "title": "Створення питань",
+                "description": (
+                    "Генератор чергує кілька типів питань, щоб квест не перевіряв "
+                    "лише пам’ять, а також розуміння, послідовність і причини подій."
+                ),
+                "example": "; ".join(question_strategies[:4]),
+            },
+            {
+                "title": "Формування хибних відповідей",
+                "description": (
+                    "Неправильні варіанти беруться з інших речень або резервних "
+                    "тверджень. Вони мають бути правдоподібними, але не збігатися "
+                    "з правильною відповіддю."
+                ),
+                "example": "резервні твердження та речення, які не є правильною відповіддю",
+            },
+        ]
+
+        return {
+            "title": request.title,
+            "sentence_count": len(sentences),
+            "used_fallback_sentences": used_fallback_sentences,
+            "keywords": keywords,
+            "keyword_frequencies": keyword_frequencies,
+            "named_entities": named_entities,
+            "selected_entity": selected_entity,
+            "question_strategies": question_strategies,
+            "distractor_strategy": (
+                "Хибні відповіді формуються з альтернативних речень тексту або "
+                "з нейтральних резервних варіантів, після чого всі варіанти "
+                "нормалізуються і перемішуються."
+            ),
+            "steps": steps,
+        }
+
+    @staticmethod
+    def _extract_keyword_frequencies(text: str) -> dict[str, int]:
+        words = re.findall(r"[А-Яа-яA-Za-zІіЇїЄєҐґ]{5,}", text.lower())
+
+        stop_words = {
+            "цього",
+            "після",
+            "перед",
+            "який",
+            "яка",
+            "вони",
+            "було",
+            "була",
+            "були",
+            "дуже",
+            "коли",
+            "тому",
+            "через",
+            "щоб",
+            "може",
+            "свої",
+            "свою",
+            "його",
+            "вона",
+            "воно",
+            "текст",
+            "книга",
+            "книжки",
+            "також",
+            "потрібно",
+            "можна",
+            "читати",
+        }
+
+        frequency: dict[str, int] = {}
+
+        for word in words:
+            if word not in stop_words:
+                frequency[word] = frequency.get(word, 0) + 1
+
+        sorted_words = sorted(
+            frequency.items(),
+            key=lambda item: (-item[1], item[0]),
+        )
+
+        return {
+            word: count
+            for word, count in sorted_words[:12]
+        }
+
+    @staticmethod
+    def _extract_named_entities(text: str) -> list[str]:
+        candidates = re.findall(r"\b[А-ЯІЇЄҐ][а-яіїєґ]{2,}\b|\b[A-Z][a-z]{2,}\b", text)
+
+        ignored = {
+            "Одного",
+            "Коли",
+            "Щоб",
+            "Тому",
+            "Після",
+            "Перед",
+            "Україна",
+            "Система",
+            "Текст",
+        }
+
+        result: list[str] = []
+        seen: set[str] = set()
+
+        for candidate in candidates:
+            if candidate in ignored:
+                continue
+
+            key = candidate.casefold()
+
+            if key not in seen:
+                seen.add(key)
+                result.append(candidate)
+
+        return result[:12]
+
+
     @staticmethod
     def _normalize_options(correct: str, candidates: list[str]) -> list[str]:
         normalized: list[str] = []

@@ -10,12 +10,7 @@ void main() {
         'order_number': 2,
         'question_type': 'single_choice',
         'text': 'Яка головна ідея тексту?',
-        'options': [
-          'Варіант 1',
-          'Варіант 2',
-          'Варіант 3',
-          'Варіант 4',
-        ],
+        'options': ['Варіант 1', 'Варіант 2', 'Варіант 3', 'Варіант 4'],
       };
 
       final question = QuestQuestion.fromJson(json);
@@ -121,7 +116,7 @@ void main() {
   });
 
   group('AttemptResult model', () {
-    test('parses AttemptResult from JSON', () {
+    test('parses AttemptResult from JSON with recommendation', () {
       final json = {
         'attempt_id': 7,
         'user_id': 2,
@@ -132,6 +127,7 @@ void main() {
         'earned_coins': 8,
         'percentage': 66.67,
         'message': 'Непогано, але деякі деталі варто перечитати.',
+        'recommendation': 'Рекомендовано пройти ще один квест.',
         'answers': [
           {
             'question_id': 1,
@@ -165,9 +161,29 @@ void main() {
       expect(result.earnedCoins, 8);
       expect(result.percentage, 66.67);
       expect(result.message, 'Непогано, але деякі деталі варто перечитати.');
+      expect(result.recommendation, 'Рекомендовано пройти ще один квест.');
       expect(result.answers.length, 2);
       expect(result.answers.first.isCorrect, true);
       expect(result.answers.last.isCorrect, false);
+    });
+
+    test('uses message as recommendation fallback', () {
+      final json = {
+        'attempt_id': 7,
+        'user_id': 2,
+        'quest_id': 10,
+        'score': 1,
+        'total_questions': 3,
+        'earned_xp': 10,
+        'earned_coins': 2,
+        'percentage': 33.33,
+        'message': 'Спробуй ще раз.',
+        'answers': <Map<String, dynamic>>[],
+      };
+
+      final result = AttemptResult.fromJson(json);
+
+      expect(result.recommendation, 'Спробуй ще раз.');
     });
 
     test('creates report JSON from AttemptResult', () {
@@ -181,6 +197,7 @@ void main() {
         earnedCoins: 8,
         percentage: 66.67,
         message: 'Непогано.',
+        recommendation: 'Варто повторити окремі фрагменти.',
         answers: [
           AttemptAnswerReview(
             questionId: 1,
@@ -205,12 +222,13 @@ void main() {
       expect(report['earned_xp'], 40);
       expect(report['earned_coins'], 8);
       expect(report['message'], 'Непогано.');
+      expect(report['recommendation'], 'Варто повторити окремі фрагменти.');
       expect(report['answers'], isA<List>());
       expect((report['answers'] as List).length, 1);
     });
   });
 
-  group('UserProgress model', () {
+  group('Progress and history models', () {
     test('parses UserProgress from JSON', () {
       final json = {
         'user_id': 1,
@@ -238,9 +256,7 @@ void main() {
       expect(progress.nextLevelXp, 200);
       expect(progress.levelProgressPercent, 80.0);
     });
-  });
 
-  group('QuestHistoryItem model', () {
     test('parses QuestHistoryItem from JSON', () {
       final json = {
         'attempt_id': 1,
@@ -296,6 +312,285 @@ void main() {
       expect(text.pagesRead, 4);
       expect(text.createdAt.year, 2026);
       expect(text.createdAt.hour, 15);
+    });
+  });
+
+  group('Gamification models', () {
+    test('parses Achievement from JSON', () {
+      final json = {
+        'key': 'first_quest',
+        'title': 'Перше проходження',
+        'description': 'Учень завершив перший навчальний квест.',
+        'icon': 'flag',
+        'color': 'green',
+        'is_unlocked': true,
+        'current_value': 1,
+        'target_value': 1,
+        'progress_percent': 100.0,
+      };
+
+      final achievement = Achievement.fromJson(json);
+
+      expect(achievement.key, 'first_quest');
+      expect(achievement.isUnlocked, true);
+      expect(achievement.progressPercent, 100.0);
+    });
+
+    test('parses AvatarShop and finds equipped item by category', () {
+      final json = {
+        'user_id': 1,
+        'coins': 16,
+        'unlocked_items': ['hat_star'],
+        'equipped_items': ['hat_star'],
+        'items': [
+          {
+            'key': 'hat_star',
+            'title': 'Зоряний капелюх',
+            'description': 'Яскравий капелюх.',
+            'category': 'hat',
+            'price': 8,
+            'icon': 'star',
+            'color': 'yellow',
+            'is_unlocked': true,
+            'is_equipped': true,
+          },
+          {
+            'key': 'pet_owl',
+            'title': 'Мудра сова',
+            'description': 'Помічник для читання.',
+            'category': 'pet',
+            'price': 18,
+            'icon': 'pets',
+            'color': 'blue',
+            'is_unlocked': false,
+            'is_equipped': false,
+          },
+        ],
+      };
+
+      final shop = AvatarShop.fromJson(json);
+
+      expect(shop.userId, 1);
+      expect(shop.coins, 16);
+      expect(shop.items.length, 2);
+      expect(shop.equippedByCategory('hat')?.key, 'hat_star');
+      expect(shop.equippedByCategory('pet'), isNull);
+    });
+
+    test('parses PurchaseResult from JSON', () {
+      final json = {
+        'message': 'Предмет успішно куплено та активовано.',
+        'user_id': 1,
+        'coins': 8,
+        'purchased_item': {
+          'key': 'hat_star',
+          'title': 'Зоряний капелюх',
+          'description': 'Яскравий капелюх.',
+          'category': 'hat',
+          'price': 8,
+          'icon': 'star',
+          'color': 'yellow',
+          'is_unlocked': true,
+          'is_equipped': true,
+        },
+        'shop': {
+          'user_id': 1,
+          'coins': 8,
+          'unlocked_items': ['hat_star'],
+          'equipped_items': ['hat_star'],
+          'items': [
+            {
+              'key': 'hat_star',
+              'title': 'Зоряний капелюх',
+              'description': 'Яскравий капелюх.',
+              'category': 'hat',
+              'price': 8,
+              'icon': 'star',
+              'color': 'yellow',
+              'is_unlocked': true,
+              'is_equipped': true,
+            },
+          ],
+        },
+      };
+
+      final result = PurchaseResult.fromJson(json);
+
+      expect(result.userId, 1);
+      expect(result.coins, 8);
+      expect(result.purchasedItem.key, 'hat_star');
+      expect(result.shop.equippedItems, ['hat_star']);
+    });
+
+    test('parses StreakStats and converts to JSON', () {
+      final json = {
+        'user_id': 1,
+        'current_streak': 3,
+        'longest_streak': 5,
+        'active_today': true,
+        'last_activity': '2026-06-01T00:00:00',
+        'message': 'Серія вже формується.',
+      };
+
+      final streak = StreakStats.fromJson(json);
+      final report = streak.toJson();
+
+      expect(streak.userId, 1);
+      expect(streak.currentStreak, 3);
+      expect(streak.longestStreak, 5);
+      expect(streak.activeToday, true);
+      expect(streak.lastActivity?.year, 2026);
+      expect(report['current_streak'], 3);
+    });
+
+    test('parses LeaderboardEntry from JSON', () {
+      final json = {
+        'rank': 1,
+        'user_id': 1,
+        'username': 'Demo Reader',
+        'grade_level': 5,
+        'total_xp': 240,
+        'coins': 16,
+        'level': 3,
+        'completed_quests': 11,
+        'average_percentage': 72.5,
+        'best_percentage': 100.0,
+        'current_streak': 2,
+      };
+
+      final entry = LeaderboardEntry.fromJson(json);
+
+      expect(entry.rank, 1);
+      expect(entry.username, 'Demo Reader');
+      expect(entry.level, 3);
+      expect(entry.averagePercentage, 72.5);
+      expect(entry.currentStreak, 2);
+    });
+  });
+
+  group('Teacher dashboard models', () {
+    test('parses TeacherAnalytics legacy model', () {
+      final json = {
+        'user_id': 1,
+        'username': 'Demo Reader',
+        'average_percentage': 80.0,
+        'best_percentage': 100.0,
+        'attempt_count': 2,
+        'completed_quests': 2,
+        'openai_count': 1,
+        'algorithm_count': 1,
+        'total_earned_xp': 120,
+        'total_earned_coins': 24,
+        'recommendation': 'Результати добрі.',
+        'history': [
+          {
+            'attempt_id': 1,
+            'quest_id': 10,
+            'title': 'Квест',
+            'percentage': 80.0,
+            'score': 4,
+            'total_questions': 5,
+            'earned_xp': 60,
+            'earned_coins': 12,
+            'generated_by': 'algorithm',
+            'created_at': '2026-06-01T10:00:00',
+          },
+        ],
+      };
+
+      final analytics = TeacherAnalytics.fromJson(json);
+
+      expect(analytics.userId, 1);
+      expect(analytics.averagePercentage, 80.0);
+      expect(analytics.openAiCount, 1);
+      expect(analytics.algorithmCount, 1);
+      expect(analytics.history.length, 1);
+    });
+
+    test('parses TeacherDashboard and creates export JSON', () {
+      final json = {
+        'selected_user_id': 1,
+        'selected_username': 'Demo Reader',
+        'students': [
+          {
+            'user_id': 1,
+            'username': 'Demo Reader',
+            'grade_level': 5,
+            'total_xp': 180,
+            'coins': 16,
+            'completed_quests': 5,
+            'average_percentage': 76.0,
+            'best_percentage': 100.0,
+            'last_activity': '2026-06-01T10:00:00',
+          },
+        ],
+        'average_percentage': 76.0,
+        'best_percentage': 100.0,
+        'worst_percentage': 40.0,
+        'attempt_count': 5,
+        'completed_quests': 5,
+        'openai_count': 2,
+        'algorithm_count': 3,
+        'total_earned_xp': 180,
+        'total_earned_coins': 36,
+        'total_correct_answers': 19,
+        'total_questions': 25,
+        'success_trend': 'стабільний',
+        'recommendation': 'Можна поступово підвищувати складність.',
+        'strong_sides': ['Є регулярна історія проходжень.'],
+        'attention_points': ['Варто повторити складні тексти.'],
+        'metrics': [
+          {
+            'key': 'average',
+            'title': 'Середній результат',
+            'value': '76%',
+            'subtitle': 'за останніми проходженнями',
+            'icon': 'percent',
+            'color': 'purple',
+          },
+        ],
+        'chart': [
+          {
+            'attempt_id': 1,
+            'quest_id': 10,
+            'title': 'Квест',
+            'label': 'Квест 1',
+            'percentage': 76.0,
+            'score': 4,
+            'total_questions': 5,
+            'generated_by': 'algorithm',
+            'created_at': '2026-06-01T10:00:00',
+          },
+        ],
+        'insights': [
+          {
+            'title': 'Сильні сторони',
+            'description': 'Є регулярна історія проходжень.',
+            'kind': 'positive',
+            'icon': 'thumb_up',
+          },
+        ],
+      };
+
+      final dashboard = TeacherDashboard.fromJson(json);
+      final report = dashboard.toReportJson();
+
+      expect(dashboard.selectedUserId, 1);
+      expect(dashboard.selectedUsername, 'Demo Reader');
+      expect(dashboard.students.length, 1);
+      expect(dashboard.averagePercentage, 76.0);
+      expect(dashboard.bestPercentage, 100.0);
+      expect(dashboard.worstPercentage, 40.0);
+      expect(dashboard.openAiCount, 2);
+      expect(dashboard.algorithmCount, 3);
+      expect(dashboard.metrics.length, 1);
+      expect(dashboard.chart.length, 1);
+      expect(dashboard.insights.length, 1);
+
+      expect(report['selected_user_id'], 1);
+      expect(report['selected_username'], 'Demo Reader');
+      expect(report['chart'], isA<List>());
+      expect((report['chart'] as List).length, 1);
     });
   });
 }

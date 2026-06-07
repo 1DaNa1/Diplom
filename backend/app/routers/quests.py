@@ -13,6 +13,7 @@ from app.models import (
 from app.schemas import (
     AnswerReviewOut,
     AttemptResult,
+    LocalGenerationPreviewOut,
     QuestGenerateFromLibraryRequest,
     QuestGenerateRequest,
     QuestOut,
@@ -21,6 +22,23 @@ from app.schemas import (
 from app.services.content_generator import ContentGenerationService
 
 router = APIRouter(prefix="/api/quests", tags=["quests"])
+
+
+@router.post("/local-generation-preview", response_model=LocalGenerationPreviewOut)
+def preview_local_generation(
+    payload: QuestGenerateRequest,
+):
+    """
+    Пояснює роботу локального алгоритму без створення квесту.
+
+    Endpoint використовується для демонстрації прозорості алгоритмічної
+    генерації: показує речення, ключові слова, іменовані сутності,
+    обраного кандидата на роль персонажа та стратегію формування питань.
+    """
+
+    generator = ContentGenerationService()
+    return generator.explain_local_generation(payload)
+
 
 
 def get_or_create_user(

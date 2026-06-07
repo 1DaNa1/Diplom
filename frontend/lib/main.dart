@@ -679,14 +679,6 @@ class RoleSelectorCard extends StatelessWidget {
               ),
             ],
           ),
-          const SizedBox(height: 12),
-          InfoBanner(
-            color: isStudent ? AppColors.yellowSoft : AppColors.blueSoft,
-            icon: isStudent ? Icons.star : Icons.analytics,
-            text: isStudent
-                ? 'У режимі учня можна створювати квести, проходити питання, отримувати монети й дивитися прогрес.'
-                : 'У режимі вчителя можна додавати тексти, керувати бібліотекою та відкривати аналітику результатів.',
-          ),
         ],
       ),
     );
@@ -809,17 +801,6 @@ class GenerationSettingsCard extends StatelessWidget {
     required this.onGradeLevelChanged,
   });
 
-  String get difficultyDescription {
-    switch (difficulty) {
-      case 'easy':
-        return 'Легка: питання переважно на факти, уважність і просте розуміння тексту.';
-      case 'hard':
-        return 'Складна: питання на причини, висновки, послідовність подій і глибше розуміння.';
-      case 'medium':
-      default:
-        return 'Середня: питання на розуміння змісту, деталей і логіки подій.';
-    }
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -949,13 +930,6 @@ class GenerationSettingsCard extends StatelessWidget {
                     .toList(),
               );
             },
-          ),
-          const SizedBox(height: 12),
-          InfoBanner(
-            color: Colors.white,
-            icon: Icons.lightbulb,
-            text:
-                '$difficultyDescription Параметри також впливають на кількість питань, спосіб генерації та навчальне навантаження.',
           ),
         ],
       ),
@@ -1121,8 +1095,6 @@ class TeacherModePanel extends StatelessWidget {
   Widget build(BuildContext context) {
     return Column(
       children: [
-        const TeacherDashboardPreview(),
-        const SizedBox(height: 18),
         GameCard(
           backgroundColor: Colors.white,
           borderColor: AppColors.blue,
@@ -1263,33 +1235,6 @@ class StudentHeroStrip extends StatelessWidget {
   }
 }
 
-class TeacherDashboardPreview extends StatelessWidget {
-  const TeacherDashboardPreview({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return const GameCard(
-      backgroundColor: AppColors.blueSoft,
-      borderColor: AppColors.blue,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SectionTitle(
-            'Панель вчителя',
-            icon: Icons.dashboard_customize,
-          ),
-          SizedBox(height: 12),
-          InfoBanner(
-            color: Colors.white,
-            icon: Icons.insights,
-            text:
-                'Режим вчителя візуально відокремлено від режиму учня. Тут зосереджено роботу з бібліотекою, матеріалами та аналітикою результатів.',
-          ),
-        ],
-      ),
-    );
-  }
-}
 
 class LibraryPanel extends StatelessWidget {
   final String title;
@@ -2109,6 +2054,12 @@ class ResultScreen extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                if (result.percentage >= 70 || result.earnedXp >= 50) ...[
+                  CelebrationFireworks(
+                    isPerfect: result.percentage >= 99,
+                  ),
+                  const SizedBox(height: 18),
+                ],
                 GameCard(
                   backgroundColor: Colors.white,
                   borderColor: resultColor,
@@ -2191,6 +2142,8 @@ class ResultScreen extends StatelessWidget {
                     ],
                   ),
                 ),
+                const SizedBox(height: 18),
+                ResultRewardBanner(result: result),
                 const SizedBox(height: 18),
                 const SectionTitle(
                   'Розбір відповідей',
@@ -2403,6 +2356,8 @@ class _ProgressScreenState extends State<ProgressScreen> {
     final shop = await apiService.getAvatarShop(userId: selectedUserId);
     final analytics = await apiService.getTeacherAnalytics(userId: selectedUserId);
     final achievements = await apiService.getAchievements(userId: selectedUserId);
+    final streak = await apiService.getStreakStats(userId: selectedUserId);
+    final leaderboard = await apiService.getLeaderboard(limit: 10);
     final teacherDashboard = await apiService.getTeacherDashboard(userId: selectedUserId);
 
     return ProgressBundle(
@@ -2411,6 +2366,8 @@ class _ProgressScreenState extends State<ProgressScreen> {
       shop: shop,
       analytics: analytics,
       achievements: achievements,
+      streak: streak,
+      leaderboard: leaderboard,
       teacherDashboard: teacherDashboard,
     );
   }
@@ -2494,7 +2451,7 @@ class _ProgressScreenState extends State<ProgressScreen> {
 
     try {
       final result = await apiService.purchaseAvatarItem(
-        userId: widget.userId,
+        userId: selectedUserId,
         itemKey: item.key,
       );
 
@@ -2578,6 +2535,12 @@ class _ProgressScreenState extends State<ProgressScreen> {
                   children: [
                     ProgressSummaryCard(progress: bundle.progress),
                     const SizedBox(height: 18),
+                    StreakAndLeaderboardCard(
+                      streak: bundle.streak,
+                      leaderboard: bundle.leaderboard,
+                      selectedUserId: selectedUserId,
+                    ),
+                    const SizedBox(height: 18),
                     AchievementsCard(achievements: bundle.achievements),
                     const SizedBox(height: 18),
                     AvatarUpgradeCard(
@@ -2628,6 +2591,8 @@ class ProgressBundle {
   final AvatarShop shop;
   final TeacherAnalytics analytics;
   final List<Achievement> achievements;
+  final StreakStats streak;
+  final List<LeaderboardEntry> leaderboard;
   final TeacherDashboard teacherDashboard;
 
   ProgressBundle({
@@ -2636,6 +2601,8 @@ class ProgressBundle {
     required this.shop,
     required this.analytics,
     required this.achievements,
+    required this.streak,
+    required this.leaderboard,
     required this.teacherDashboard,
   });
 }
@@ -3463,6 +3430,299 @@ class HistoryCard extends StatelessWidget {
   }
 }
 
+
+
+class StreakAndLeaderboardCard extends StatelessWidget {
+  final StreakStats streak;
+  final List<LeaderboardEntry> leaderboard;
+  final int selectedUserId;
+
+  const StreakAndLeaderboardCard({
+    super.key,
+    required this.streak,
+    required this.leaderboard,
+    required this.selectedUserId,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GameCard(
+      backgroundColor: Colors.white,
+      borderColor: AppColors.yellow,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const SectionTitle(
+            'Страйки та таблиця лідерів',
+            icon: Icons.local_fire_department,
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(
+                child: _StreakPanel(streak: streak),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: _LeaderboardPanel(
+                  entries: leaderboard,
+                  selectedUserId: selectedUserId,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _StreakPanel extends StatelessWidget {
+  final StreakStats streak;
+
+  const _StreakPanel({
+    required this.streak,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: AppColors.yellowSoft,
+        borderRadius: BorderRadius.circular(22),
+        border: Border.all(
+          color: AppColors.yellow,
+          width: 2,
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          RewardIcon(
+            icon: Icons.local_fire_department,
+            color: AppColors.yellow,
+            size: 54,
+          ),
+          const SizedBox(height: 12),
+          Text(
+            '${streak.currentStreak} дн. поспіль',
+            style: const TextStyle(
+              fontSize: 24,
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            'Найдовша серія: ${streak.longestStreak} дн.',
+            style: const TextStyle(
+              color: AppColors.muted,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+          const SizedBox(height: 10),
+          InfoBanner(
+            color: Colors.white,
+            icon: streak.activeToday ? Icons.check_circle : Icons.schedule,
+            text: streak.message,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _LeaderboardPanel extends StatelessWidget {
+  final List<LeaderboardEntry> entries;
+  final int selectedUserId;
+
+  const _LeaderboardPanel({
+    required this.entries,
+    required this.selectedUserId,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    if (entries.isEmpty) {
+      return const EmptyState(
+        icon: Icons.leaderboard,
+        title: 'Лідерборд порожній',
+        subtitle: 'Після проходження квестів тут з’являться результати.',
+      );
+    }
+
+    return Column(
+      children: entries.take(5).map((entry) {
+        final bool selected = entry.userId == selectedUserId;
+        final Color color = entry.rank == 1
+            ? AppColors.yellow
+            : selected
+                ? AppColors.purple
+                : AppColors.blue;
+
+        return Container(
+          margin: const EdgeInsets.only(bottom: 10),
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: selected ? AppColors.purpleSoft : AppColors.blueSoft,
+            borderRadius: BorderRadius.circular(18),
+            border: Border.all(
+              color: color,
+              width: selected ? 2.2 : 1.4,
+            ),
+          ),
+          child: Row(
+            children: [
+              CircleAvatar(
+                backgroundColor: color,
+                foregroundColor: Colors.white,
+                child: Text(
+                  '${entry.rank}',
+                  style: const TextStyle(fontWeight: FontWeight.w900),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  entry.username,
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w900,
+                    fontSize: 15,
+                  ),
+                ),
+              ),
+              PixelChip(
+                label: '${entry.totalXp} XP',
+                icon: Icons.bolt,
+                color: AppColors.purple,
+              ),
+              const SizedBox(width: 8),
+              PixelChip(
+                label: '${entry.currentStreak}🔥',
+                icon: Icons.local_fire_department,
+                color: AppColors.yellow,
+              ),
+            ],
+          ),
+        );
+      }).toList(),
+    );
+  }
+}
+
+class CelebrationFireworks extends StatelessWidget {
+  final bool isPerfect;
+
+  const CelebrationFireworks({
+    super.key,
+    required this.isPerfect,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final symbols = isPerfect
+        ? ['🏆', '✨', '🎉', '⭐', '🔥', '📚']
+        : ['✨', '🎉', '⭐', '📚'];
+
+    return TweenAnimationBuilder<double>(
+      tween: Tween(begin: 0, end: 1),
+      duration: const Duration(milliseconds: 900),
+      curve: Curves.easeOutBack,
+      builder: (context, value, child) {
+        return Transform.scale(
+          scale: 0.85 + value * 0.15,
+          child: Opacity(
+            opacity: value.clamp(0.0, 1.0),
+            child: child,
+          ),
+        );
+      },
+      child: GameCard(
+        backgroundColor: isPerfect ? AppColors.yellowSoft : AppColors.purpleSoft,
+        borderColor: isPerfect ? AppColors.yellow : AppColors.purple,
+        child: Column(
+          children: [
+            Wrap(
+              alignment: WrapAlignment.center,
+              spacing: 12,
+              runSpacing: 12,
+              children: List.generate(
+                18,
+                (index) => Text(
+                  symbols[index % symbols.length],
+                  style: TextStyle(
+                    fontSize: 24 + (index % 3) * 5,
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
+            Text(
+              isPerfect
+                  ? 'Ідеальне проходження. Відкрито святковий ефект перемоги!'
+                  : 'Квест завершено. Прогрес, XP і нагороди вже зараховано!',
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                fontWeight: FontWeight.w900,
+                fontSize: 16,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class ResultRewardBanner extends StatelessWidget {
+  final AttemptResult result;
+
+  const ResultRewardBanner({
+    super.key,
+    required this.result,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final bool levelHint = result.earnedXp >= 50;
+    final bool achievementHint = result.percentage >= 90;
+
+    return GameCard(
+      backgroundColor: AppColors.greenSoft,
+      borderColor: AppColors.green,
+      child: Row(
+        children: [
+          RewardIcon(
+            icon: achievementHint
+                ? Icons.workspace_premium
+                : levelHint
+                    ? Icons.trending_up
+                    : Icons.card_giftcard,
+            color: AppColors.green,
+            size: 58,
+          ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Text(
+              achievementHint
+                  ? 'Високий результат може відкрити нові досягнення. Перейдіть у прогрес, щоб перевірити нагороди.'
+                  : levelHint
+                      ? 'Отримано достатньо XP для помітного прогресу рівня. Продовжуйте серію читання.'
+                      : 'Навіть невеликий результат зберігається в історії та допомагає побачити навчальний прогрес.',
+              style: const TextStyle(
+                color: AppColors.ink,
+                fontWeight: FontWeight.w800,
+                height: 1.45,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+
 class PixelBookIcon extends StatelessWidget {
   const PixelBookIcon({super.key});
 
@@ -3491,7 +3751,7 @@ class PixelBookIcon extends StatelessWidget {
   }
 }
 
-class PixelCompanion extends StatelessWidget {
+class PixelCompanion extends StatefulWidget {
   final double size;
   final Color bodyColor;
   final Color accessoryColor;
@@ -3504,73 +3764,110 @@ class PixelCompanion extends StatelessWidget {
   });
 
   @override
-  Widget build(BuildContext context) {
-    final unit = size / 7;
+  State<PixelCompanion> createState() => _PixelCompanionState();
+}
 
-    return SizedBox(
-      width: size,
-      height: size,
-      child: Stack(
-        alignment: Alignment.center,
-        children: [
-          Positioned(
-            top: unit * 0.2,
-            child: Container(
-              width: unit * 3.6,
-              height: unit * 1.1,
-              decoration: BoxDecoration(
-                color: accessoryColor,
-                borderRadius: BorderRadius.circular(unit * 0.2),
-              ),
-            ),
+class _PixelCompanionState extends State<PixelCompanion>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController controller;
+
+  @override
+  void initState() {
+    super.initState();
+    controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1300),
+    )..repeat(reverse: true);
+  }
+
+  @override
+  void dispose() {
+    controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final unit = widget.size / 7;
+
+    return AnimatedBuilder(
+      animation: controller,
+      builder: (context, child) {
+        final offset = math.sin(controller.value * math.pi) * 5;
+
+        return Transform.translate(
+          offset: Offset(0, -offset),
+          child: Transform.rotate(
+            angle: math.sin(controller.value * math.pi * 2) * 0.035,
+            child: child,
           ),
-          Positioned(
-            top: unit * 1.2,
-            child: Container(
-              width: unit * 4.4,
-              height: unit * 4.2,
-              decoration: BoxDecoration(
-                color: bodyColor,
-                borderRadius: BorderRadius.circular(unit * 1.2),
-                border: Border.all(
-                  color: AppColors.ink,
-                  width: 2,
+        );
+      },
+      child: SizedBox(
+        width: widget.size,
+        height: widget.size,
+        child: Stack(
+          alignment: Alignment.center,
+          children: [
+            Positioned(
+              top: unit * 0.2,
+              child: Container(
+                width: unit * 3.6,
+                height: unit * 1.1,
+                decoration: BoxDecoration(
+                  color: widget.accessoryColor,
+                  borderRadius: BorderRadius.circular(unit * 0.2),
                 ),
               ),
             ),
-          ),
-          Positioned(
-            top: unit * 2.4,
-            left: unit * 2.0,
-            child: _PixelEye(size: unit * 0.65),
-          ),
-          Positioned(
-            top: unit * 2.4,
-            right: unit * 2.0,
-            child: _PixelEye(size: unit * 0.65),
-          ),
-          Positioned(
-            top: unit * 3.6,
-            child: Container(
-              width: unit * 1.7,
-              height: unit * 0.42,
-              decoration: BoxDecoration(
-                color: AppColors.ink,
-                borderRadius: BorderRadius.circular(999),
+            Positioned(
+              top: unit * 1.2,
+              child: Container(
+                width: unit * 4.4,
+                height: unit * 4.2,
+                decoration: BoxDecoration(
+                  color: widget.bodyColor,
+                  borderRadius: BorderRadius.circular(unit * 1.2),
+                  border: Border.all(
+                    color: AppColors.ink,
+                    width: 2,
+                  ),
+                ),
               ),
             ),
-          ),
-          Positioned(
-            bottom: unit * 0.8,
-            left: unit * 1.4,
-            child: _PixelFoot(size: unit, color: bodyColor),
-          ),
-          Positioned(
-            bottom: unit * 0.8,
-            right: unit * 1.4,
-            child: _PixelFoot(size: unit, color: bodyColor),
-          ),
-        ],
+            Positioned(
+              top: unit * 2.4,
+              left: unit * 2.0,
+              child: _PixelEye(size: unit * 0.65),
+            ),
+            Positioned(
+              top: unit * 2.4,
+              right: unit * 2.0,
+              child: _PixelEye(size: unit * 0.65),
+            ),
+            Positioned(
+              top: unit * 3.6,
+              child: Container(
+                width: unit * 1.7,
+                height: unit * 0.42,
+                decoration: BoxDecoration(
+                  color: AppColors.ink,
+                  borderRadius: BorderRadius.circular(999),
+                ),
+              ),
+            ),
+            Positioned(
+              bottom: unit * 0.8,
+              left: unit * 1.4,
+              child: _PixelFoot(size: unit, color: widget.bodyColor),
+            ),
+            Positioned(
+              bottom: unit * 0.8,
+              right: unit * 1.4,
+              child: _PixelFoot(size: unit, color: widget.bodyColor),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -4088,11 +4385,11 @@ class TeacherDashboardCard extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 12),
-          InfoBanner(
+          const InfoBanner(
             color: AppColors.blueSoft,
-            icon: Icons.auto_graph,
+            icon: Icons.person_search,
             text:
-                'Аналітика формується за історією проходжень, результатами, XP, монетами та способом генерації квестів.',
+                'Оберіть учня, щоб переглянути його результати, динаміку успішності та рекомендації.',
           ),
           const SizedBox(height: 16),
           if (dashboard.students.isEmpty)

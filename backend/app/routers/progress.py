@@ -1,3 +1,4 @@
+from datetime import date, datetime, timedelta
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
@@ -5,6 +6,7 @@ from app.database import get_db
 from app.models import Attempt, Quest, User, UserCosmetic
 from app.schemas import (
     AchievementOut,
+    LeaderboardEntryOut,
     AnalyticsHistoryPoint,
     ProgressOut,
     PurchaseItemRequest,
@@ -12,6 +14,7 @@ from app.schemas import (
     QuestHistoryItem,
     ShopItemOut,
     ShopStateOut,
+    StreakOut,
     StudentSummaryOut,
     TeacherAnalyticsOut,
     TeacherChartPointOut,
@@ -581,6 +584,163 @@ def calculate_attempt_percentage(attempt: Attempt) -> float:
     return round((attempt.score / attempt.total_questions) * 100, 2)
 
 
+
+
+def build_streak_stats(
+    user: User,
+    db: Session,
+) -> StreakOut:
+    """
+    Розраховує серію активних днів на основі дат проходження квестів.
+
+    Окрема таблиця для streak не потрібна: дані виводяться з attempts.
+    Це зберігає просту архітектуру й не потребує міграцій бази даних.
+    """
+
+    attempt_dates = {
+        attempt.created_at.date()
+        for attempt in (
+            db.query(Attempt)
+            .filter(Attempt.user_id == user.id)
+            .order_by(Attempt.created_at.desc())
+            .all()
+        )
+    }
+
+    if not attempt_dates:
+        return StreakOut(
+            user_id=user.id,
+            current_streak=0,
+            longest_streak=0,
+            active_today=False,
+            last_activity=None,
+            message="Після першого проходження квесту тут з’явиться серія днів із читанням.",
+        )
+
+    today = date.today()
+    active_today = today in attempt_dates
+    last_activity_date = max(attempt_dates)
+    last_activity_datetime = datetime.combine(last_activity_date, datetime.min.time())
+
+    start_day = today if active_today else today - timedelta(days=1)
+    current_streak = 0
+    cursor = start_day
+
+    while cursor in attempt_dates:
+        current_streak += 1
+        cursor -= timedelta(days=1)
+
+    longest_streak = 0
+    running_streak = 0
+    previous_day: date | None = None
+
+    for attempt_day in sorted(attempt_dates):
+        if previous_day is None:
+            running_streak = 1
+        elif attempt_day == previous_day + timedelta(days=1):
+            running_streak += 1
+        else:
+            running_streak = 1
+
+        longest_streak = max(longest_streak, running_streak)
+        previous_day = attempt_day
+
+    if current_streak >= 5:
+        message = "Чудова серія читання. Учень стабільно повертається до навчальних квестів."
+    elif current_streak >= 2:
+        message = "Серія вже формується. Варто підтримати щоденне коротке читання."
+    elif active_today:
+        message = "Сьогодні квест уже виконано. Серію можна продовжити завтра."
+    else:
+        message = "Серію можна відновити після нового проходження квесту."
+
+    return StreakOut(
+        user_id=user.id,
+        current_streak=current_streak,
+        longest_streak=longest_streak,
+        active_today=active_today,
+        last_activity=last_activity_datetime,
+        message=message,
+    )
+
+
+def build_leaderboard(
+    db: Session,
+    limit: int = 10,
+) -> list[LeaderboardEntryOut]:
+    """
+    Формує таблицю лідерів за сумарним XP, середнім результатом і streak.
+
+    Лідерборд підсилює ігрову мотивацію, але не вимагає окремої таблиці:
+    усі показники рахуються з users та attempts.
+    """
+
+    users = db.query(User).all()
+    entries: list[dict] = []
+
+    for user in users:
+        attempts = (
+            db.query(Attempt)
+            .filter(Attempt.user_id == user.id)
+            .order_by(Attempt.created_at.desc())
+            .all()
+        )
+
+        percentages = [
+            calculate_attempt_percentage(attempt)
+            for attempt in attempts
+        ]
+
+        average_percentage = round(sum(percentages) / len(percentages), 2) if percentages else 0.0
+        best_percentage = round(max(percentages), 2) if percentages else 0.0
+        streak = build_streak_stats(user=user, db=db)
+        level, _, _, _ = calculate_level(user.total_xp)
+
+        entries.append(
+            {
+                "user": user,
+                "level": level,
+                "completed_quests": len(attempts),
+                "average_percentage": average_percentage,
+                "best_percentage": best_percentage,
+                "current_streak": streak.current_streak,
+            }
+        )
+
+    entries.sort(
+        key=lambda item: (
+            item["user"].total_xp,
+            item["average_percentage"],
+            item["current_streak"],
+            item["completed_quests"],
+        ),
+        reverse=True,
+    )
+
+    result: list[LeaderboardEntryOut] = []
+
+    for rank, item in enumerate(entries[:limit], start=1):
+        user = item["user"]
+
+        result.append(
+            LeaderboardEntryOut(
+                rank=rank,
+                user_id=user.id,
+                username=user.username,
+                grade_level=user.grade_level,
+                total_xp=user.total_xp,
+                coins=user.coins,
+                level=item["level"],
+                completed_quests=item["completed_quests"],
+                average_percentage=item["average_percentage"],
+                best_percentage=item["best_percentage"],
+                current_streak=item["current_streak"],
+            )
+        )
+
+    return result
+
+
 def build_user_achievements(
     user: User,
     db: Session,
@@ -748,6 +908,23 @@ def get_teacher_dashboard_for_user(
     return build_teacher_dashboard(
         db=db,
         user_id=user_id,
+        limit=limit,
+    )
+
+
+
+
+@router.get("/leaderboard", response_model=list[LeaderboardEntryOut])
+def get_leaderboard(
+    limit: int = Query(default=10, ge=1, le=50),
+    db: Session = Depends(get_db),
+):
+    """
+    Повертає таблицю лідерів для візуального блоку гейміфікації.
+    """
+
+    return build_leaderboard(
+        db=db,
         limit=limit,
     )
 
@@ -1004,6 +1181,25 @@ def get_user_achievements(
     user = get_user_or_404(user_id=user_id, db=db)
 
     return build_user_achievements(
+        user=user,
+        db=db,
+    )
+
+
+
+
+@router.get("/{user_id}/streak", response_model=StreakOut)
+def get_user_streak(
+    user_id: int,
+    db: Session = Depends(get_db),
+):
+    """
+    Повертає серію активних днів учня.
+    """
+
+    user = get_user_or_404(user_id=user_id, db=db)
+
+    return build_streak_stats(
         user=user,
         db=db,
     )

@@ -787,3 +787,93 @@ class TeacherDashboard {
     };
   }
 }
+
+
+class StreakStats {
+  final int userId;
+  final int currentStreak;
+  final int longestStreak;
+  final bool activeToday;
+  final DateTime? lastActivity;
+  final String message;
+
+  StreakStats({
+    required this.userId,
+    required this.currentStreak,
+    required this.longestStreak,
+    required this.activeToday,
+    required this.lastActivity,
+    required this.message,
+  });
+
+  factory StreakStats.fromJson(Map<String, dynamic> json) {
+    final rawLastActivity = json['last_activity'];
+
+    return StreakStats(
+      userId: json['user_id'],
+      currentStreak: json['current_streak'],
+      longestStreak: json['longest_streak'],
+      activeToday: json['active_today'],
+      lastActivity: rawLastActivity == null
+          ? null
+          : DateTime.parse(rawLastActivity.toString()),
+      message: json['message'],
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'user_id': userId,
+      'current_streak': currentStreak,
+      'longest_streak': longestStreak,
+      'active_today': activeToday,
+      'last_activity': lastActivity?.toIso8601String(),
+      'message': message,
+    };
+  }
+}
+
+class LeaderboardEntry {
+  final int rank;
+  final int userId;
+  final String username;
+  final int gradeLevel;
+  final int totalXp;
+  final int coins;
+  final int level;
+  final int completedQuests;
+  final double averagePercentage;
+  final double bestPercentage;
+  final int currentStreak;
+
+  LeaderboardEntry({
+    required this.rank,
+    required this.userId,
+    required this.username,
+    required this.gradeLevel,
+    required this.totalXp,
+    required this.coins,
+    required this.level,
+    required this.completedQuests,
+    required this.averagePercentage,
+    required this.bestPercentage,
+    required this.currentStreak,
+  });
+
+  factory LeaderboardEntry.fromJson(Map<String, dynamic> json) {
+    return LeaderboardEntry(
+      rank: json['rank'],
+      userId: json['user_id'],
+      username: json['username'],
+      gradeLevel: json['grade_level'],
+      totalXp: json['total_xp'],
+      coins: json['coins'],
+      level: json['level'],
+      completedQuests: json['completed_quests'],
+      averagePercentage: (json['average_percentage'] as num).toDouble(),
+      bestPercentage: (json['best_percentage'] as num).toDouble(),
+      currentStreak: json['current_streak'],
+    );
+  }
+}
+
